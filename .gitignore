@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.bin
+*.rom
+*.dump
+dumps/
+images/
+read-records/
+write-records/
+write-attempts/
