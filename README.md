@@ -36,39 +36,88 @@ Never power the radio and programmer simultaneously. Do not increase the EEPROM 
 
 ## VIN utility
 
-The Python utility has no third-party dependencies:
+The Python utility has no third-party dependencies. Use [uv](https://docs.astral.sh/uv/) to select the pinned Python 3.12 interpreter:
 
 ```sh
-python3 scripts/eeprom_vin.py inspect radio.bin --first-character W
-python3 scripts/eeprom_vin.py patch radio.bin patched.bin W0000000000000000
-python3 scripts/eeprom_vin.py clear radio.bin experimental-clear.bin
+uv run --no-project python scripts/eeprom_vin.py inspect radio.bin --first-character W
+uv run --no-project python scripts/eeprom_vin.py patch radio.bin patched.bin W0000000000000000
+uv run --no-project python scripts/eeprom_vin.py clear radio.bin experimental-clear.bin
 ```
 
 `patch` and `clear` refuse to overwrite an existing output file. They validate the 16 KiB image and the surrounding `AC`/`AD` record tags, print SHA-256 hashes, and prove that changes are confined to the VIN field.
 
 The `clear` command is deliberately described as experimental in its output.
 
-## CH341A helper scripts
+## Configured repair workflow
 
-The shell wrappers expect a compatible `ch341eeprom` executable, such as [stefanct/ch341eepromtool](https://github.com/stefanct/ch341eepromtool). They do not contain passwords or invoke `sudo` themselves.
+`scripts/radio.py` uses environment variables for vehicle details, expected-image hashes, programmer location, and private storage. It has no third-party Python dependencies and runs from the repository root using the pinned Python 3.12 interpreter. With a suitable Python installation, `python3` can replace `uv run --no-project python`. It expects a compatible `ch341eeprom` executable, such as [stefanct/ch341eepromtool](https://github.com/stefanct/ch341eepromtool), using its standard 100 kHz speed.
 
-Read three independent copies:
-
-```sh
-sudo ./scripts/read-24c128.sh /path/to/ch341eeprom ./read-record
-```
-
-Perform a guarded write, where `expected-current.bin` must exactly match the fresh pre-write chip read:
+Keep private data in `debug/`. This workspace ignores `debug/` through its global Git ignore configuration; the repository does not add a local ignore rule. On another machine, configure the same global rule and verify it before copying private files:
 
 ```sh
-sudo ./scripts/write-24c128-guarded.sh \
-  /path/to/ch341eeprom \
-  expected-current.bin \
-  intended-target.bin \
-  ./write-record
+git check-ignore -v debug/config.env
+mkdir -p debug
+cp config.env.example debug/config.env
 ```
 
-Review both shell scripts before using them. A wiring, voltage, orientation, chip-selection, or image-selection mistake can damage hardware or destroy recoverable data.
+Fill in `debug/config.env` with your own values. Use shell quoting for values containing spaces. Load only a configuration file you trust:
+
+```sh
+set -a
+. ./debug/config.env
+set +a
+```
+
+| Variable | Purpose |
+|---|---|
+| `RADIO_DATA_DIR` | Private storage root for generated images and operation records, usually `debug` |
+| `RADIO_PROGRAMMER` | Executable path or command name of the CH341A tool |
+| `RADIO_TARGET_VIN` | Receiving vehicle's 17-character VIN |
+| `RADIO_FIRST_CHARACTER` | Known first VIN character for inspection; it is omitted from the EEPROM field |
+| `RADIO_DONOR_IMAGE`, `RADIO_DONOR_SHA256` | Authoritative donor backup and independently verified SHA-256 |
+| `RADIO_ORIGINAL_IMAGE`, `RADIO_ORIGINAL_SHA256` | Authoritative original-radio backup and independently verified SHA-256 |
+
+Paths are relative to the working directory unless absolute. Preserve the baseline hashes after independently verifying the backups; do not regenerate them automatically to accept a changed file. New read operations do not require configured backups.
+
+Read three independent copies of a physically identified chip:
+
+```sh
+uv run --no-project python scripts/radio.py read donor
+uv run --no-project python scripts/radio.py read original
+```
+
+Read operations require confirmation, reject uniform or inconsistent contents, and save uniquely named records under `$RADIO_DATA_DIR/records/`. Verified images are made read-only. After choosing authoritative backups, set their paths and hashes in the private configuration.
+
+Inspect a verified backup or build the donor's target image:
+
+```sh
+uv run --no-project python scripts/radio.py inspect donor
+uv run --no-project python scripts/radio.py inspect original
+uv run --no-project python scripts/radio.py patch donor
+```
+
+Donor patching verifies both backup hashes and requires the original radio's stored VIN to corroborate `RADIO_TARGET_VIN`. It modifies only the 16-byte VIN field. The output is `$RADIO_DATA_DIR/images/donor-vin.bin`; repeating the build accepts identical output but refuses to overwrite different contents.
+
+Program the donor only after reviewing the physical chip and target image:
+
+```sh
+uv run --no-project python scripts/radio.py write donor --target debug/images/donor-vin.bin
+```
+
+The writer requires the target to exactly equal the configured VIN-only modification, preserves expected and target images, and reads the seated chip before writing. An unknown chip is rejected. A chip already containing the target is verified twice without writing. Otherwise, a separate typed write confirmation is required, followed by two complete readbacks that must match the target.
+
+The experimental original-radio operation remains explicit:
+
+```sh
+uv run --no-project python scripts/radio.py clear original
+uv run --no-project python scripts/radio.py write original --target debug/images/original-cleared.bin --experimental-clear
+```
+
+Clearing the field does not prove automatic VIN learning. A write requires the separate `WRITE EXPERIMENTAL CLEAR ORIGINAL` confirmation. Do not repeat an already verified physical operation just because the tools have moved.
+
+The workflow does not invoke `sudo`. If your programmer requires elevated privileges, preserve only the documented configuration variables when running it under your system's privilege mechanism. Check voltage, wiring, and pin orientation before every hardware session.
+
+Back up `debug/` separately: ignored files are not uploaded to GitHub or recovered by cloning the public repository. Keep real identifiers, EEPROM images, photographs, operation records, and personal repair notes out of tracked files. The private configuration is the only place to maintain your vehicle-specific setup.
 
 ## Hardware notes
 
@@ -79,12 +128,10 @@ No real EEPROM dumps, vehicle VINs, radio serial numbers, write records, or orig
 ## Tests
 
 ```sh
-python3 -m unittest discover -s tests -v
-sh -n scripts/read-24c128.sh
-sh -n scripts/write-24c128-guarded.sh
+uv run --no-project python -m unittest discover -s tests -v
 ```
 
-The tests construct synthetic 16 KiB images in memory. They do not contain vehicle data.
+The tests use synthetic 16 KiB images and a fake programmer. They check chip identity, VIN-only targets, explicit confirmation, failed reads, readback verification, experimental clearing, and repeat operations without accessing hardware or containing vehicle data.
 
 ## Sources
 
