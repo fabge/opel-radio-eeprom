@@ -1,6 +1,6 @@
 # Opel radio EEPROM tools
 
-Keep reusable tools and generalized findings public. Keep real VINs, radio identifiers, hashes, dumps, photographs, repair history, and operation records in the locally ignored `debug/` directory. Confirm the global ignore rule with `git check-ignore -v debug/config.env` before storing private data. Never stage private files with `git add -f`.
+Keep reusable tools and generalized findings public. Keep real VINs, radio identifiers, hashes, dumps, photographs, repair history, and operation records in a separate private workspace or a locally ignored `debug/` directory. For local storage, confirm the global ignore rule with `git check-ignore -v debug/config.env` before copying private data. Use absolute configuration paths for external storage. Never stage private files with `git add -f`.
 
 Use `scripts/radio.py` for configured repair workflows; `scripts/eeprom_vin.py` provides the underlying image utility. Configuration comes from `RADIO_*` environment variables. Do not hard-code vehicle data or duplicate workflows in private scripts.
 

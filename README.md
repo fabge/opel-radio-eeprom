@@ -54,7 +54,7 @@ The `clear` command is deliberately described as experimental in its output.
 
 `scripts/radio.py` uses environment variables for vehicle details, expected-image hashes, programmer location, and private storage. It has no third-party Python dependencies and runs from the repository root using the pinned Python 3.12 interpreter. With a suitable Python installation, `python3` can replace `uv run --no-project python`. It expects a compatible `ch341eeprom` executable, such as [stefanct/ch341eepromtool](https://github.com/stefanct/ch341eepromtool), using its standard 100 kHz speed.
 
-Keep private data in `debug/`. This workspace ignores `debug/` through its global Git ignore configuration; the repository does not add a local ignore rule. On another machine, configure the same global rule and verify it before copying private files:
+Keep private data in an ignored directory or a separate private workspace. Absolute paths in the configuration let this public checkout use evidence stored elsewhere. For a local `debug/` directory, this workspace ignores `debug/` through its global Git ignore configuration; the repository does not add a local ignore rule. On another machine, configure the same global rule and verify it before copying private files:
 
 ```sh
 git check-ignore -v debug/config.env
@@ -62,7 +62,7 @@ mkdir -p debug
 cp config.env.example debug/config.env
 ```
 
-Fill in `debug/config.env` with your own values. Use shell quoting for values containing spaces. Load only a configuration file you trust:
+Fill in the private configuration with your own values. For external storage, use absolute paths for `RADIO_DATA_DIR`, image files, and the programmer executable, and source that configuration instead of `./debug/config.env`. Use shell quoting for values containing spaces. Load only a configuration file you trust:
 
 ```sh
 set -a
@@ -72,7 +72,7 @@ set +a
 
 | Variable | Purpose |
 |---|---|
-| `RADIO_DATA_DIR` | Private storage root for generated images and operation records, usually `debug` |
+| `RADIO_DATA_DIR` | Private storage root for generated images and operation records, an absolute private path or `debug` |
 | `RADIO_PROGRAMMER` | Executable path or command name of the CH341A tool |
 | `RADIO_TARGET_VIN` | Receiving vehicle's 17-character VIN |
 | `RADIO_FIRST_CHARACTER` | Known first VIN character for inspection; it is omitted from the EEPROM field |
@@ -103,7 +103,7 @@ Donor patching verifies both backup hashes and requires the original radio's sto
 Program the donor only after reviewing the physical chip and target image:
 
 ```sh
-uv run --no-project python scripts/radio.py write donor --target debug/images/donor-vin.bin
+uv run --no-project python scripts/radio.py write donor --target "$RADIO_DATA_DIR/images/donor-vin.bin"
 ```
 
 The writer requires the target to exactly equal the configured VIN-only modification, preserves expected and target images, and reads the seated chip before writing. An unknown chip is rejected. A chip already containing the target is verified twice without writing. Otherwise, a separate typed write confirmation is required, followed by two complete readbacks that must match the target.
@@ -112,14 +112,14 @@ The experimental original-radio operation remains explicit:
 
 ```sh
 uv run --no-project python scripts/radio.py clear original
-uv run --no-project python scripts/radio.py write original --target debug/images/original-cleared.bin --experimental-clear
+uv run --no-project python scripts/radio.py write original --target "$RADIO_DATA_DIR/images/original-cleared.bin" --experimental-clear
 ```
 
 Clearing the field does not prove automatic VIN learning. A write requires the separate `WRITE EXPERIMENTAL CLEAR ORIGINAL` confirmation. Do not repeat an already verified physical operation just because the tools have moved.
 
 The workflow does not invoke `sudo`. If your programmer requires elevated privileges, preserve only the documented configuration variables when running it under your system's privilege mechanism. Check voltage, wiring, and pin orientation before every hardware session.
 
-Back up `debug/` separately: ignored files are not uploaded to GitHub or recovered by cloning the public repository. Keep real identifiers, EEPROM images, photographs, operation records, and personal repair notes out of tracked files. The private configuration is the only place to maintain your vehicle-specific setup.
+Back up the private storage directory separately: ignored files are not uploaded to GitHub or recovered by cloning the public repository. Keep real identifiers, EEPROM images, photographs, operation records, and personal repair notes out of tracked files. The private configuration is the only place to maintain your vehicle-specific setup.
 
 ## Hardware notes
 
