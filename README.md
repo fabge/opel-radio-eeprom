@@ -1,8 +1,10 @@
 # Opel radio EEPROM notes and tools
 
+EEPROM inspection and guarded VIN adaptation for Opel/GM radios. Verified on a Daewoo IS `DWGM1004` with a 24C128 EEPROM in an Opel Corsa E. Compatibility with other radio hardware or vehicle models has not been established.
+
 This repository documents a reproducible EEPROM workflow used to adapt a used Opel/GM radio to a different vehicle VIN. It focuses on preserving recoverability: read the complete EEPROM out of circuit, require repeatable backups, change only understood bytes, and verify every write with independent full-chip readbacks.
 
-The confirmed case was a Daewoo IS `DWGM1004` radio with a 24C128 EEPROM installed in an Opel Corsa E. Directly replacing its stored VIN field worked in the receiving vehicle.
+Directly replacing the tested radio's stored VIN field worked in the receiving vehicle.
 
 ## What is confirmed
 
